@@ -33,7 +33,7 @@ default_param = {'beta_1': 1e-3,
                  'Theta': 0.7
                  }
 
-
+#继承callback，在模型训练的各个阶段执行操作
 class LossHistory(keras.callbacks.Callback):
 
     def __init__(self,training_data,model,batch_size,total_epoch,save_dir,determine_threshold=5,satisfied_acc=0.7,\
@@ -55,6 +55,7 @@ class LossHistory(keras.callbacks.Callback):
         self.trainX = training_data[0]
         self.trainy = training_data[1]
         self.batch_size=batch_size
+        #keras模型
         self.model=model
         self.satisfied_acc=satisfied_acc
         self.satisfied_count=satisfied_count
@@ -92,6 +93,7 @@ class LossHistory(keras.callbacks.Callback):
         self.log_file=open(self.log_name,'a+')
         self.log_file.write('{},{},{},{},{}\n'.format('checktype','current_epoch','issue_list','time_usage','Describe'))
 
+        #调用monitor进行监测
         self.Monitor=mn.IssueMonitor(total_epoch,self.satisfied_acc,self.params,self.determine_threshold)
 
     def on_train_begin(self,logs=None):
@@ -118,7 +120,7 @@ class LossHistory(keras.callbacks.Callback):
             for i in range(len(self.evaluated_gradients)):
                 if isinstance(self.evaluated_gradients[i],np.ndarray):
                     gradient_list.append(self.evaluated_gradients[i])
-
+           #monitor识别出issue
             self.issue_list=self.Monitor.determine(self.model,self.history,gradient_list,self.checkgap)
             self.issue_list=md.filtered_issue(self.issue_list)
 
@@ -165,7 +167,7 @@ class LossHistory(keras.callbacks.Callback):
                     self.log_file.flush()
                     self.model.stop_training = True
 
-
+    #在训练结束调用
     def on_train_end(self,logs=None):
         if self.retrain==True and self.issue_list==[]:
             self.log_file.write('------------Solved!-----------\n')
@@ -176,6 +178,7 @@ class LossHistory(keras.callbacks.Callback):
             solution_dir=self.pkl_dir
         if not os.path.exists(solution_dir):
             os.makedirs(solution_dir)
+        #issue应该是已经识别出的prolem，那么识别的过程在哪
         issue_path=os.path.join(solution_dir,'issue_history.pkl')
         tmpset={'issue_list':self.issue_list,'history':self.history}
         with open(issue_path, 'wb') as f:
@@ -342,6 +345,7 @@ def model_train(model,
         [type]: [if autorepair is True, return a trained model and the log/description file path.\
             if autorepair is False, only return the problems and the corresponding solution description]
     """
+    #创建相关的目录
     save_dir = os.path.abspath(save_dir)
     log_dir=os.path.abspath(log_dir)
     if not os.path.exists(save_dir):
@@ -351,11 +355,12 @@ def model_train(model,
     if isinstance(model, str):
         model_path = model
         model = load_model(model_path)
-    #K.clear_session()
+    #K.clear_session()  第一步编译模型
     model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])
+    #callbacks是从模型文件中加载出来的，checkpoint设置一定的间隔保存模型文件，把callsback中的LossHistory和ModelCheckpoint删除，在后续步骤中进行了更新
     callbacks = [n for n in callbacks if (
         n.__class__ != LossHistory and n.__class__ != ModelCheckpoint)]
-
+    #根据情况增加callsback
     if 'estop' in callbacks:
         callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss',min_delta=0,patience=3, 
             verbose=0, mode='auto',baseline=None, restore_best_weights=False))
@@ -368,36 +373,47 @@ def model_train(model,
     
     checkpoint_name = "train_best.h5"
     checkpoint_dir = os.path.join(save_dir, 'checkpoint_model')
+    #checkpoint最终保存成为h5文件
     checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
+    #判断
     callbacks.append(ModelCheckpoint(
         checkpoint_path, save_best_only=True, monitor='val_accuracy', mode='max'))
     callbacks.append(LossHistory(training_data=[dataset['x'], dataset['y']], model=model,determine_threshold=determine_threshold,
                                  batch_size=batch_size, save_dir=save_dir, total_epoch=iters, satisfied_acc=satisfied_acc, checktype=checktype,params=params))  # issue in lstm network
 
     callbacks_new = list(set(callbacks))
+    #关键方法，训练模型
     history = model.fit(dataset['x'], dataset['y'], batch_size=batch_size, validation_data=(
         dataset['x_val'], dataset['y_val']), epochs=iters, verbose=verb, callbacks=callbacks_new)
+    #该步骤保存check_point_model
     check_point_model(checkpoint_dir, checkpoint_path, dataset,history)
 
     result = history.history
+    #反射callback类，获取训练日志
     time_callback = TimeHistory()
+    #存的什么日志？
     log_path = os.path.join(log_dir, 'log.csv')
     if 'val_loss' in result.keys():
         time_callback.write_to_csv(result, log_path, iters)
-
+    #solution会保存到save_dir
     solution_dir = os.path.join(save_dir, 'solution')
+    #issue_history.pkl文件存储issue,issue_history.txt应该是fit()的输出？还不确定
     issue_path = os.path.join(solution_dir, 'issue_history.pkl')
+    #根据上个文件中
     with open(issue_path, 'rb') as f:  #input,bug type,params
+        #从模型文件中加载内容
         output = pickle.load(f)
     issues = output['issue_list']
+    #issue代表已经分析出的问题
     if issues!=[]:
         if autorepair == True:
             #auto repair
             train_config = pack_train_config(optimizer, loss, dataset, iters,
                                                 batch_size, callbacks)
             start_time=time.time()
+            #开始修复模型
             rm = md.Repair_Module(
                 model=model,
                 training_config=train_config,
@@ -420,10 +436,12 @@ def model_train(model,
             tmpset['initial_issue']=issue_list
             tmpset['now_issue']=now_issue
             tmppath=os.path.join(save_dir,'repair_result_total.pkl')
+            #load()和dump()方法分别序列化和反序列化对象
             with open(tmppath, 'wb') as f:
                 pickle.dump(tmpset, f)
         else:
             print('You can find the description of the solution candidates in {}'.format('./path'))
+    #返回三个变量一一对应
     return result,model, trained_path
 
 
@@ -440,6 +458,7 @@ def model_retrain(model,
     retrain_dir=os.path.abspath(retrain_dir)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    #判断model对象是否是str类的实例
     if isinstance(model,str):
         model_path=model
         model=load_model(model_path)
@@ -462,13 +481,40 @@ def model_retrain(model,
     checkpoint_path=os.path.join(checkpoint_dir,checkpoint_name)
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
+    '''
+    ModelCheckpoint
+    callback相当于按照一定的间隔来保存模型
+    通过
+    model.fit()
+    与训练结合使用，以指定时间间隔保存模型或权重为
+    checkpoint
+    文件，以便稍后可以加载模型或权重，从而从保存的状态继续训练。
+
+    该
+    callback
+    提供了如下选项：
+
+    是只保留到目前为止性能最佳的模型，还是不管性能，每个epoch结束时都保存模型；
+    最佳的定义：要监控的指标，以及应该最大化还是最小化；
+    保存的频率，目前支持在每个
+    epoch
+    结束时保存，或指定训练
+    batches
+    后保存；
+    是只保存权重，还是保存整个模型。
+    '''
     config['callbacks'].append(ModelCheckpoint(checkpoint_path, save_best_only=True, monitor='val_accuracy', mode='max'))
+    #此处设置了新的callback
     callbacks_new=list(set(config['callbacks']))
+    #开始训练模型
     history = model.fit(config['dataset']['x'], config['dataset']['y'],batch_size=config['batch_size'], validation_data=(config['dataset']['x_val'], config['dataset']['y_val']),\
         epochs=config['epoch'], verbose=verb,callbacks=callbacks_new)
     check_point_model(checkpoint_dir,checkpoint_path,config,history)
-    issue_path = os.path.join(save_dir, 'issue_history.pkl')   
-    with open(issue_path, 'rb') as f:  
+    #查看issue_history.pkl文件在哪里生成
+    issue_path = os.path.join(save_dir, 'issue_history.pkl')
+
+    with open(issue_path, 'rb') as f:
+        # 用pkl存储并加载python序列化数据
         output = pickle.load(f)
     new_issues = output['issue_list']
     if 'need_train' in new_issues:

@@ -17,7 +17,9 @@ import pickle
 import uuid
 
 
-
+"""
+监控模块
+"""
 
 def inclusion_ratio(x,nparray):
     return float(np.sum(nparray==x))/float(nparray.size)
@@ -196,6 +198,7 @@ def gradient_message_summary(gradient_list):
 
 
 class IssueMonitor:
+    #IssueMonitor构造函数
     def __init__(self,total_epoch,satisfied_acc,params,determine_threshold=1):
         """[summary]
 
@@ -242,7 +245,7 @@ class IssueMonitor:
                         #  'Theta': 0.7
                         #  }
 
-
+    #在此识别出issue？不确定
     def determine(self,model,history,gradient_list,checkgap):
         #no issue model should has train or test acc better than satisfyied acc and no unstable.
         self.history=history
@@ -262,6 +265,9 @@ class IssueMonitor:
         #定义一个新的feature，针对没达到目标acc。
         # if self.feature['not_trained_well']:
         #     self.issue_list=determine_training(self.feature,self.initial_feature)
+        '''
+        关键代码，此处根据训练信息，识别出issue，即论文中的problem
+        '''
         if self.issue_list==[]:
             if self.feature['nan_loss'] or self.feature['nan_weight'] or self.feature['nan_gradient']:
                 self.issue_list.append('explode')

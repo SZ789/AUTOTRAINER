@@ -45,20 +45,25 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model=load_model(args.model_path)
-
+    #打开pkl文件，加载一系列配置  pkl文件如何生成的？
     with open(args.config_path, 'rb') as f:#input,bug type,params
         training_config = pickle.load(f)
+    #training_config从pickle中加载出trianingconfig
     opt_cls = getattr(O, training_config['optimizer'])
     opt = opt_cls(**training_config['opt_kwargs'])
     batch_size=training_config['batchsize']
     epoch=training_config['epoch']
     loss=training_config['loss']
     dataset=get_dataset(training_config['dataset'])
+
+
+    #模型文件的结构
     if 'callbacks' not in training_config.keys():
         callbacks=[]
     else:
         callbacks=training_config['callbacks']
     check_interval='epoch_'+str(args.check_interval)
+
 
     save_dir=args.result_dir
     log_dir=args.log_dir

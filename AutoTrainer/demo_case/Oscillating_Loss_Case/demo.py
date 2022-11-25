@@ -35,7 +35,9 @@ def get_dataset(dataset):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='OL Problem Demo Detection & Autorepair')
+    #h5存储模型信息
     parser.add_argument('--model_path','-mp',default='./model.h5', help='model path')
+    #pkl文件存储的是训练参数信息
     parser.add_argument('--config_path', '-cp',default='./config.pkl', help='training configurations path') 
     parser.add_argument('--check_interval', '-ci',default=3, help='detection interval') 
     parser.add_argument('--result_dir', '-rd',default='./tmp/result_dir', help='The dir to store results') 
